@@ -4,8 +4,8 @@ A small Go HTTP API for accounts and transfers using SQLite and integer cents.
 
 ## Current status
 
-Project skeleton only. All four endpoints return `501 Not Implemented`.
-Account-creation tests are written first and currently fail until implementation.
+Account creation is implemented and tested. Balance lookup, transfers, and
+history still return `501 Not Implemented`.
 
 ## Run
 
@@ -21,6 +21,17 @@ the database's parent directory must exist.
 
 ```sh
 PORT=8081 DB_PATH=/tmp/money-demo.db go run ./cmd/server
+```
+
+## Create an account
+
+The starting balance is required and must be a nonnegative integer in cents.
+Returns `201` with the created account.
+
+```sh
+curl -i -X POST http://localhost:8080/accounts \
+  -H 'Content-Type: application/json' \
+  -d '{"starting_balance_cents":1250}'
 ```
 
 ## Tests

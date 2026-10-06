@@ -2,6 +2,9 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"log"
 	"net/http"
 
 	"koho-move-the-money/internal/money"
@@ -22,7 +25,35 @@ func NewHandler(service *money.Service) http.Handler {
 }
 
 func (h *handler) openAccount(w http.ResponseWriter, r *http.Request) {
-	notImplemented(w)
+	var request struct {
+		StartingBalanceCents *int64 `json:"starting_balance_cents"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON request"})
+		return
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "request must contain one JSON object"})
+		return
+	}
+	if request.StartingBalanceCents == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "starting_balance_cents is required"})
+		return
+	}
+
+	account, err := h.service.OpenAccount(r.Context(), *request.StartingBalanceCents)
+	if errors.Is(err, money.ErrInvalidInput) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "starting_balance_cents must be nonnegative"})
+		return
+	}
+	if err != nil {
+		log.Printf("create account: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not create account"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, account)
 }
 
 func (h *handler) getAccount(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +69,13 @@ func (h *handler) transfer(w http.ResponseWriter, r *http.Request) {
 }
 
 func notImplemented(w http.ResponseWriter) {
+	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": money.ErrNotImplemented.Error()})
+}
+
+func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": money.ErrNotImplemented.Error()})
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		log.Printf("write JSON response: %v", err)
+	}
 }
