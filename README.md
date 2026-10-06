@@ -6,6 +6,7 @@ A small Go HTTP API for accounts and transfers using SQLite and integer cents.
 
 Account creation, lookup, and history are implemented and tested.
 Transfers still return `501 Not Implemented`.
+Transfer tests define the next feature and intentionally fail until it is implemented.
 
 ## Run
 
@@ -58,4 +59,10 @@ accounts return `404`.
 
 ```sh
 go test ./...
+```
+
+Run only the currently implemented account and history features:
+
+```sh
+go test ./... -run 'Test(OpenAccount|AccountSchema|CreateAccount|GetAccount|History)'
 ```

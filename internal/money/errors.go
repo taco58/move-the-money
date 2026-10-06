@@ -13,4 +13,7 @@ var (
 	ErrInsufficientFunds   = errors.New("insufficient funds")
 	ErrIdempotencyConflict = errors.New("idempotency key already used for another transfer")
 	ErrBalanceOverflow     = errors.New("recipient balance would overflow")
+	// ErrDatabaseBusy means SQLite could not acquire its writer lock before
+	// the busy timeout expired. The caller may retry with the same key.
+	ErrDatabaseBusy = errors.New("database busy")
 )
