@@ -3,6 +3,7 @@ package money
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -41,7 +42,28 @@ func (s *Service) OpenAccount(ctx context.Context, startingBalanceCents int64) (
 }
 
 func (s *Service) GetAccount(ctx context.Context, id int64) (Account, error) {
-	return Account{}, ErrNotImplemented
+	if id <= 0 {
+		return Account{}, fmt.Errorf("%w: account ID must be positive", ErrInvalidInput)
+	}
+
+	var account Account
+	var createdAt string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, opening_balance_cents, balance_cents, created_at
+		FROM accounts
+		WHERE id = ?
+	`, id).Scan(&account.ID, &account.OpeningBalanceCents, &account.BalanceCents, &createdAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Account{}, fmt.Errorf("%w: ID %d", ErrAccountNotFound, id)
+	}
+	if err != nil {
+		return Account{}, fmt.Errorf("get account: %w", err)
+	}
+	account.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return Account{}, fmt.Errorf("parse account creation time: %w", err)
+	}
+	return account, nil
 }
 
 func (s *Service) Transfer(ctx context.Context, input TransferInput) (Transfer, bool, error) {
