@@ -6,6 +6,7 @@ A small Go HTTP API for accounts and transfers using SQLite and integer cents.
 
 Account creation and lookup are implemented and tested. Transfers and history
 still return `501 Not Implemented`.
+History tests are written first and currently fail until implementation.
 
 ## Run
 
