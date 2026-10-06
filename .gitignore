@@ -1,0 +1,6 @@
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+/bin/
+.DS_Store
