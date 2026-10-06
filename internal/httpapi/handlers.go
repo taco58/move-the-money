@@ -98,11 +98,55 @@ func (h *handler) history(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) transfer(w http.ResponseWriter, r *http.Request) {
-	notImplemented(w)
-}
+	var request struct {
+		FromAccountID *int64 `json:"from_account_id"`
+		ToAccountID   *int64 `json:"to_account_id"`
+		AmountCents   *int64 `json:"amount_cents"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON request"})
+		return
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "request must contain one JSON object"})
+		return
+	}
+	if request.FromAccountID == nil || request.ToAccountID == nil || request.AmountCents == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "from_account_id, to_account_id, and amount_cents are required"})
+		return
+	}
 
-func notImplemented(w http.ResponseWriter) {
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": money.ErrNotImplemented.Error()})
+	receipt, replayed, err := h.service.Transfer(r.Context(), money.TransferInput{
+		IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		FromAccountID:  *request.FromAccountID,
+		ToAccountID:    *request.ToAccountID,
+		AmountCents:    *request.AmountCents,
+	})
+	switch {
+	case errors.Is(err, money.ErrInvalidInput):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	case errors.Is(err, money.ErrAccountNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "account not found"})
+	case errors.Is(err, money.ErrInsufficientFunds):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "insufficient funds"})
+	case errors.Is(err, money.ErrIdempotencyConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "idempotency key already used for another transfer"})
+	case errors.Is(err, money.ErrBalanceOverflow):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "recipient balance would overflow"})
+	case errors.Is(err, money.ErrDatabaseBusy):
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database busy; retry with the same Idempotency-Key"})
+	case err != nil:
+		log.Printf("create transfer: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not create transfer"})
+	default:
+		status := http.StatusCreated
+		if replayed {
+			status = http.StatusOK
+		}
+		writeJSON(w, status, receipt)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

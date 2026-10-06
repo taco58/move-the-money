@@ -4,9 +4,7 @@ A small Go HTTP API for accounts and transfers using SQLite and integer cents.
 
 ## Current status
 
-Account creation, lookup, and history are implemented and tested.
-Transfers still return `501 Not Implemented`.
-Transfer tests define the next feature and intentionally fail until it is implemented.
+Account creation, lookup, history, and transfers are implemented and tested.
 
 ## Run
 
@@ -59,10 +57,30 @@ accounts return `404`.
 
 ```sh
 go test ./...
+go test -race ./...
 ```
 
-Run only the currently implemented account and history features:
+## Send money
 
 ```sh
-go test ./... -run 'Test(OpenAccount|AccountSchema|CreateAccount|GetAccount|History)'
+curl -i -X POST http://localhost:8080/transfers \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: demo-transfer-1' \
+  -d '{"from_account_id":1,"to_account_id":2,"amount_cents":100}'
 ```
+
+Create both accounts first. Amounts must be positive integer cents and accounts
+must differ. Returns `201` for a new transfer, or `200` with the original receipt
+when the same key and request are retried. Reusing a key with different details
+returns `409`. Failed transfers do not consume keys; successful keys persist.
+
+Invalid input returns `400`, missing accounts `404`, insufficient funds or
+recipient overflow `409`, writer-lock timeout `503`, and unexpected failures `500`.
+Retry uncertain outcomes with the same key and request.
+
+## Scope and next steps
+
+SQLite serializes writes, keeping transfers atomic across service instances at
+the cost of write throughput. Amounts use integer cents for one currency.
+Authentication, a UI, and deployment are outside this exercise. Next steps:
+history pagination and a reconciliation check against the transfer ledger.

@@ -67,10 +67,6 @@ func (s *Service) GetAccount(ctx context.Context, id int64) (Account, error) {
 	return account, nil
 }
 
-func (s *Service) Transfer(ctx context.Context, input TransferInput) (Transfer, bool, error) {
-	return Transfer{}, false, ErrNotImplemented
-}
-
 func (s *Service) History(ctx context.Context, accountID int64) ([]HistoryEntry, error) {
 	if accountID <= 0 {
 		return nil, fmt.Errorf("%w: account ID must be positive", ErrInvalidInput)
