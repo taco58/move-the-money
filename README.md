@@ -4,8 +4,8 @@ A small Go HTTP API for accounts and transfers using SQLite and integer cents.
 
 ## Current status
 
-Project skeleton only. The server initializes SQLite; all four endpoints return
-`501 Not Implemented`. Money operations and tests are not implemented yet.
+Project skeleton only. All four endpoints return `501 Not Implemented`.
+Account-creation tests are written first and currently fail until implementation.
 
 ## Run
 
@@ -21,4 +21,10 @@ the database's parent directory must exist.
 
 ```sh
 PORT=8081 DB_PATH=/tmp/money-demo.db go run ./cmd/server
+```
+
+## Tests
+
+```sh
+go test ./...
 ```
