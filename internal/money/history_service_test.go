@@ -265,3 +265,31 @@ func TestHistoryCanceledContext(t *testing.T) {
 		t.Fatalf("want cancellation and no history, got %v, %v", entries, err)
 	}
 }
+
+func TestHistoryOrdersEquivalentTimestampFormatsByID(t *testing.T) {
+	db, service := newLookupService(t)
+	account, err := service.OpenAccount(context.Background(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := service.OpenAccount(context.Background(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := other.CreatedAt.Add(time.Second).Truncate(time.Second)
+	seedHistoryTransfer(t, db, 2, account.ID, other.ID, 1, at)
+	seedHistoryTransfer(t, db, 1, other.ID, account.ID, 1, at)
+	// These are the same instant, but a text sort places .000Z before Z.
+	if _, err := db.Exec("UPDATE transfers SET created_at = ? WHERE id = 2", at.Format("2006-01-02T15:04:05.000Z07:00")); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := service.History(context.Background(), account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertHistoryEntries(t, entries, []money.HistoryEntry{
+		{Kind: "opening", AmountCents: 100, CreatedAt: account.CreatedAt},
+		{Kind: "incoming", AmountCents: 1, TransferID: historyID(1), CounterpartyID: historyID(other.ID), CreatedAt: at},
+		{Kind: "outgoing", AmountCents: 1, TransferID: historyID(2), CounterpartyID: historyID(other.ID), CreatedAt: at},
+	})
+}

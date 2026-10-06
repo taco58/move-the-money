@@ -78,7 +78,23 @@ func (h *handler) getAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) history(w http.ResponseWriter, r *http.Request) {
-	notImplemented(w)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "account id must be a positive integer"})
+		return
+	}
+	entries, err := h.service.History(r.Context(), id)
+	switch {
+	case errors.Is(err, money.ErrInvalidInput):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "account id must be a positive integer"})
+	case errors.Is(err, money.ErrAccountNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "account not found"})
+	case err != nil:
+		log.Printf("get account history: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not get account history"})
+	default:
+		writeJSON(w, http.StatusOK, entries)
+	}
 }
 
 func (h *handler) transfer(w http.ResponseWriter, r *http.Request) {

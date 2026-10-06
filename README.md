@@ -4,9 +4,8 @@ A small Go HTTP API for accounts and transfers using SQLite and integer cents.
 
 ## Current status
 
-Account creation and lookup are implemented and tested. Transfers and history
-still return `501 Not Implemented`.
-History tests are written first and currently fail until implementation.
+Account creation, lookup, and history are implemented and tested.
+Transfers still return `501 Not Implemented`.
 
 ## Run
 
@@ -43,6 +42,17 @@ curl -i http://localhost:8080/accounts/1
 
 Returns `200` with the account and current balance, `404` for a missing account,
 or `400` for an invalid ID. IDs must be positive 64-bit integers.
+
+## Get account history
+
+```sh
+curl -i http://localhost:8080/accounts/1/transactions
+```
+
+Returns `200` with an opening event followed by incoming/outgoing transfers,
+ordered by time then transfer ID. Amounts are positive cents; `kind` indicates
+direction. The opening amount can be zero. Invalid IDs return `400`; missing
+accounts return `404`.
 
 ## Tests
 

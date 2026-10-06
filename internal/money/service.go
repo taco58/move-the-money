@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -71,5 +72,69 @@ func (s *Service) Transfer(ctx context.Context, input TransferInput) (Transfer, 
 }
 
 func (s *Service) History(ctx context.Context, accountID int64) ([]HistoryEntry, error) {
-	return nil, ErrNotImplemented
+	if accountID <= 0 {
+		return nil, fmt.Errorf("%w: account ID must be positive", ErrInvalidInput)
+	}
+	// One SELECT gives the opening event and transfers a single read snapshot,
+	// without acquiring the writer lock configured for explicit transactions.
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT 'opening', opening_balance_cents, NULL, NULL, created_at
+		FROM accounts WHERE id = ?
+		UNION ALL
+		SELECT
+			CASE WHEN t.from_account_id = a.id THEN 'outgoing' ELSE 'incoming' END,
+			t.amount_cents,
+			t.id,
+			CASE WHEN t.from_account_id = a.id THEN t.to_account_id ELSE t.from_account_id END,
+			t.created_at
+		FROM accounts a
+		JOIN transfers t ON t.from_account_id = a.id OR t.to_account_id = a.id
+		WHERE a.id = ?
+	`, accountID, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("get account history: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []HistoryEntry
+	for rows.Next() {
+		var entry HistoryEntry
+		var transferID, counterpartyID sql.NullInt64
+		var createdAt string
+		if err := rows.Scan(&entry.Kind, &entry.AmountCents, &transferID, &counterpartyID, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan account history: %w", err)
+		}
+		entry.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse history creation time: %w", err)
+		}
+		if transferID.Valid {
+			entry.TransferID = &transferID.Int64
+		}
+		if counterpartyID.Valid {
+			entry.CounterpartyID = &counterpartyID.Int64
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read account history: %w", err)
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("%w: ID %d", ErrAccountNotFound, accountID)
+	}
+	// Opening is always first. Compare parsed times because RFC3339 text can
+	// use different fractional-second widths for the same instant.
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Kind == "opening" {
+			return entries[j].Kind != "opening"
+		}
+		if entries[j].Kind == "opening" {
+			return false
+		}
+		if entries[i].CreatedAt.Equal(entries[j].CreatedAt) {
+			return *entries[i].TransferID < *entries[j].TransferID
+		}
+		return entries[i].CreatedAt.Before(entries[j].CreatedAt)
+	})
+	return entries, nil
 }
